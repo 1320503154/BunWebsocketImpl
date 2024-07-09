@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebSocket Chat</title>
     <style>
+        /* 聊天框样式 */
         #chatBox {
             height: 300px;
             overflow-y: auto;
@@ -14,28 +15,34 @@
             margin-bottom: 10px;
         }
 
+        /* 系统消息样式 */
         .system {
             color: #888;
         }
 
+        /* 公共消息样式 */
         .public {
             color: #000;
         }
 
+        /* 私人消息样式 */
         .private {
             color: #00f;
         }
 
+        /* 发送消息样式 */
         .sent {
             color: #008000;
             text-align: right;
         }
 
+        /* 接收消息样式 */
         .received {
             color: #000080;
             text-align: left;
         }
 
+        /* 图片样式 */
         img {
             max-width: 200px;
             max-height: 200px;
@@ -44,11 +51,13 @@
 </head>
 
 <body>
+    <!-- 登录表单 -->
     <div id="loginForm">
         <input type="text" id="usernameInput" placeholder="Enter your username">
         <button id="loginButton">Login</button>
     </div>
 
+    <!-- 聊天界面 -->
     <div id="chatInterface" style="display: none;">
         <h1>WebSocket Chat</h1>
         <div id="chatBox"></div>
@@ -60,13 +69,14 @@
     </div>
 
     <script>
-        let socket;
-        let username;
-        let currentReceiver = null;
-        const IMAGE_URL = 'http://localhost:3000'
-        const SERVER_URL = '/api';
-        const WS_URL = `ws://${window.location.host}/api`;
+        let socket; // WebSocket对象
+        let username; // 用户名
+        let currentReceiver = null; // 当前接收者
+        const IMAGE_URL = 'http://localhost:3000' // 图片上传地址
+        const SERVER_URL = '/api'; // 服务器地址
+        const WS_URL = `ws://${window.location.host}/api`; // WebSocket服务器地址
 
+        // 获取页面元素
         const loginForm = document.getElementById('loginForm');
         const usernameInput = document.getElementById('usernameInput');
         const loginButton = document.getElementById('loginButton');
@@ -78,87 +88,92 @@
         const imageInput = document.getElementById('imageInput');
         const sendImageButton = document.getElementById('sendImageButton');
 
+        // 登录按钮点击事件
         loginButton.onclick = function () {
-            username = usernameInput.value.trim();
-            if (username) {
-                loginForm.style.display = 'none';
-                chatInterface.style.display = 'block';
-                connectWebSocket();
+            username = usernameInput.value.trim(); // 获取用户名
+            if (username) { // 如果用户名不为空
+                loginForm.style.display = 'none'; // 隐藏登录表单
+                chatInterface.style.display = 'block'; // 显示聊天界面
+                connectWebSocket(); // 连接WebSocket
             }
         };
 
+        // 连接WebSocket
         function connectWebSocket() {
             socket = new WebSocket(`${WS_URL}/chat?username=${encodeURIComponent(username)}`);
 
             socket.onopen = function (event) {
-                appendMessage('Connected to the chat server', 'system');
+                appendMessage('Connected to the chat server', 'system'); // 连接成功
             };
 
             socket.onmessage = function (event) {
-                const data = JSON.parse(event.data);
-                if (data.type === 'history') {
-                    chatBox.innerHTML = '';
+                const data = JSON.parse(event.data); // 解析消息
+                if (data.type === 'history') { // 历史消息
+                    chatBox.innerHTML = ''; // 清空聊天框
                     data.messages.forEach(msg => {
-                        appendMessage(`${msg.sender}: ${msg.content}`, msg.sender === username ? 'sent' : 'received');
+                        appendMessage(`${msg.sender}: ${msg.content}`, msg.sender === username ? 'sent' : 'received'); // 显示历史消息
                     });
-                } else if (data.type === 'chat') {
+                } else if (data.type === 'chat') { // 公共聊天消息
                     appendMessage(data.content, 'public');
-                } else if (data.type === 'private') {
+                } else if (data.type === 'private') { // 私人消息
                     const prefix = data.sender ? `[PM from ${data.sender}]` : `[PM to ${data.receiver}]`;
-                    appendMessage(`${prefix} ${data.content}`, data.sender === username ? 'sent' : 'received');
+                    appendMessage(`${prefix} ${data.content}`, data.sender === username ? 'sent' : 'received'); // 显示私人消息
                 }
             };
 
             socket.onclose = function (event) {
-                appendMessage('Disconnected from the chat server', 'system');
+                appendMessage('Disconnected from the chat server', 'system'); // 连接关闭
             };
 
             socket.onerror = function (error) {
-                appendMessage('Error: ' + error.message, 'system');
+                appendMessage('Error: ' + error.message, 'system'); // 连接错误
             };
         }
 
+        // 发送按钮点击事件
         sendButton.onclick = sendMessage;
         messageInput.onkeypress = function (event) {
-            if (event.keyCode === 13) { // Enter key
+            if (event.keyCode === 13) { // 回车键
                 sendMessage();
             }
         };
 
+        // 接收者输入框变化事件
         receiverInput.onchange = function () {
-            const newReceiver = receiverInput.value.trim();
-            if (newReceiver !== currentReceiver) {
-                currentReceiver = newReceiver;
-                if (currentReceiver) {
+            const newReceiver = receiverInput.value.trim();// 获取新的接收者,并去除首尾空格
+            if (newReceiver !== currentReceiver) { // 如果接收者改变
+                currentReceiver = newReceiver;// 更新当前接收者
+                if (currentReceiver) {// 如果有接收者
                     socket.send(JSON.stringify({
-                        type: 'get_history',
-                        receiver: currentReceiver
-                    }));
+                        type: 'get_history',// 请求历史消息
+                        receiver: currentReceiver// 接收者
+                    })); // 请求历史消息
                 } else {
-                    chatBox.innerHTML = '';
+                    chatBox.innerHTML = ''; // 清空聊天框
                 }
             }
         };
-
+        // 发送消息
         function sendMessage() {
             const receiver = receiverInput.value.trim();
             const message = messageInput.value.trim();
-            if (message) {
+            if (message) { // 如果消息不为空
                 const data = {
                     type: 'chat',
                     content: message
                 };
-                if (receiver) {
+                if (receiver) { // 如果有接收者
                     data.receiver = receiver;
                 }
-                socket.send(JSON.stringify(data));
-                messageInput.value = '';
+                socket.send(JSON.stringify(data)); // 发送消息
+                messageInput.value = ''; // 清空输入框
             }
         }
 
+        // 发送图片按钮点击事件
         sendImageButton.onclick = async function () {
             const file = imageInput.files[0];
-            if (file) {
+            if (file) { // 如果有文件
                 const formData = new FormData();
                 formData.append('image', file);
 
@@ -174,30 +189,31 @@
                         type: 'image',
                         filename: result.filename
                     };
-                    if (receiver) {
+                    if (receiver) { // 如果有接收者
                         data.receiver = receiver;
                     }
-                    socket.send(JSON.stringify(data));
-                    imageInput.value = '';
+                    socket.send(JSON.stringify(data)); // 发送图片消息
+                    imageInput.value = ''; // 清空输入框
                 } catch (error) {
-                    console.error('Error uploading image:', error);
+                    console.error('Error uploading image:', error); // 上传错误
                 }
             }
         };
 
+        // 添加消息到聊天框
         function appendMessage(message, type) {
             const messageElement = document.createElement('div');
             messageElement.className = type;
-            if (message.includes('[Image]')) {
+            if (message.includes('[Image]')) { // 如果是图片消息
                 const img = document.createElement('img');
                 const imgUrl = `${SERVER_URL}${message.split('[Image] ')[1]}`;
                 img.src = imgUrl;
                 messageElement.appendChild(img);
             } else {
-                messageElement.textContent = message;
+                messageElement.textContent = message; // 文字消息
             }
             chatBox.appendChild(messageElement);
-            chatBox.scrollTop = chatBox.scrollHeight;
+            chatBox.scrollTop = chatBox.scrollHeight; // 滚动到底部
         }
     </script>
 </body>
