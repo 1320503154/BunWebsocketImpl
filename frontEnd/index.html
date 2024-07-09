@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        #chatBox {
+            height: 300px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            margin-bottom: 10px;
+            padding: 10px;
+        }
+
+        #messageInput {
+            width: 70%;
+            padding: 5px;
+        }
+
+        #sendButton {
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>WebSocket Chat</h1>
+    <div id="chatBox"></div>
+    <input type="text" id="messageInput" placeholder="Type a message...">
+    <button id="sendButton">Send</button>
+
+    <script>
+        const chatBox = document.getElementById('chatBox');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+
+        const socket = new WebSocket('ws://localhost:3000');
+
+        socket.onopen = function (event) {
+            appendMessage('Connected to the chat server');
+        };
+
+        socket.onmessage = function (event) {
+            appendMessage(event.data);
+        };
+
+        socket.onclose = function (event) {
+            appendMessage('Disconnected from the chat server');
+        };
+
+        socket.onerror = function (error) {
+            appendMessage('Error: ' + error.message);
+        };
+
+        sendButton.onclick = function () {
+            sendMessage();
+        };
+        // Send message when Enter key is pressed
+        messageInput.onkeypress = function (event) {
+            if (event.keyCode === 13) { // Enter key
+                sendMessage();
+            }
+        };
+
+        function sendMessage() {
+            const message = messageInput.value;//when user press enter key or click on send button
+            if (message) {//if message is not empty
+                socket.send(message);//send message to server
+                messageInput.value = '';//clear the input field
+            }
+        }
+
+        function appendMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.textContent = message;
+            chatBox.appendChild(messageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>
