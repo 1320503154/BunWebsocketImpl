@@ -4,48 +4,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enhanced WebSocket Chat</title>
+    <title>WebSocket Chat</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
         #chatBox {
-            height: 400px;
+            height: 300px;
+            overflow-y: auto;
             border: 1px solid #ccc;
-            overflow-y: scroll;
-            margin-bottom: 10px;
             padding: 10px;
-        }
-
-        #messageInput {
-            width: 60%;
-            padding: 5px;
-        }
-
-        #receiverInput {
-            width: 20%;
-            padding: 5px;
-        }
-
-        button {
-            padding: 5px 10px;
-        }
-
-        #loginForm {
-            margin-bottom: 20px;
-        }
-
-        .private {
-            color: blue;
+            margin-bottom: 10px;
         }
 
         .system {
-            color: gray;
-            font-style: italic;
+            color: #888;
+        }
+
+        .public {
+            color: #000;
+        }
+
+        .private {
+            color: #00f;
+        }
+
+        .sent {
+            color: #008000;
+            text-align: right;
+        }
+
+        .received {
+            color: #000080;
+            text-align: left;
         }
 
         img {
@@ -74,10 +62,10 @@
     <script>
         let socket;
         let username;
-
-        const IMAGE_URL = 'http://localhost:3000/uploads';
+        let currentReceiver = null;
+        const IMAGE_URL = 'http://localhost:3000'
         const SERVER_URL = '/api';
-        const WS_URL = 'ws://localhost:3000';
+        const WS_URL = `ws://${window.location.host}/api`;
 
         const loginForm = document.getElementById('loginForm');
         const usernameInput = document.getElementById('usernameInput');
@@ -108,11 +96,16 @@
 
             socket.onmessage = function (event) {
                 const data = JSON.parse(event.data);
-                if (data.type === 'chat') {
+                if (data.type === 'history') {
+                    chatBox.innerHTML = '';
+                    data.messages.forEach(msg => {
+                        appendMessage(`${msg.sender}: ${msg.content}`, msg.sender === username ? 'sent' : 'received');
+                    });
+                } else if (data.type === 'chat') {
                     appendMessage(data.content, 'public');
                 } else if (data.type === 'private') {
                     const prefix = data.sender ? `[PM from ${data.sender}]` : `[PM to ${data.receiver}]`;
-                    appendMessage(`${prefix} ${data.content}`, 'private');
+                    appendMessage(`${prefix} ${data.content}`, data.sender === username ? 'sent' : 'received');
                 }
             };
 
@@ -132,6 +125,21 @@
             }
         };
 
+        receiverInput.onchange = function () {
+            const newReceiver = receiverInput.value.trim();
+            if (newReceiver !== currentReceiver) {
+                currentReceiver = newReceiver;
+                if (currentReceiver) {
+                    socket.send(JSON.stringify({
+                        type: 'get_history',
+                        receiver: currentReceiver
+                    }));
+                } else {
+                    chatBox.innerHTML = '';
+                }
+            }
+        };
+
         function sendMessage() {
             const receiver = receiverInput.value.trim();
             const message = messageInput.value.trim();
@@ -147,31 +155,32 @@
                 messageInput.value = '';
             }
         }
+
         sendImageButton.onclick = async function () {
-            const file = imageInput.files[0]; // 获取用户选择的图片文件
+            const file = imageInput.files[0];
             if (file) {
-                const formData = new FormData(); // 创建FormData对象用于表单数据序列化
-                formData.append('image', file); // 将图片文件添加到FormData对象中
+                const formData = new FormData();
+                formData.append('image', file);
 
                 try {
                     const response = await fetch(`${SERVER_URL}/upload`, {
-                        method: 'POST', // 设置请求方法为POST
-                        body: formData // 将FormData对象作为请求体发送
+                        method: 'POST',
+                        body: formData
                     });
-                    const result = await response.json(); // 将响应体解析为JSON格式
+                    const result = await response.json();
 
-                    const receiver = receiverInput.value.trim(); // 获取接收者信息并去除首尾空白字符
+                    const receiver = receiverInput.value.trim();
                     const data = {
-                        type: 'image', // 数据类型为图片
-                        filename: result.filename // 图片文件名
+                        type: 'image',
+                        filename: result.filename
                     };
                     if (receiver) {
-                        data.receiver = receiver; // 如果存在接收者信息，将其添加到数据对象中
+                        data.receiver = receiver;
                     }
-                    socket.send(JSON.stringify(data)); // 将数据对象序列化为JSON字符串并发送
-                    imageInput.value = ''; // 清空文件输入框
+                    socket.send(JSON.stringify(data));
+                    imageInput.value = '';
                 } catch (error) {
-                    console.error('Error uploading image:', error); // 捕获并打印上传图片过程中发生的错误
+                    console.error('Error uploading image:', error);
                 }
             }
         };
@@ -179,9 +188,10 @@
         function appendMessage(message, type) {
             const messageElement = document.createElement('div');
             messageElement.className = type;
-            if (message.startsWith('[Image]')) {
+            if (message.includes('[Image]')) {
                 const img = document.createElement('img');
-                img.src = `${IMAGE_URL}${message.split(' ')[1]}`;
+                const imgUrl = `${SERVER_URL}${message.split('[Image] ')[1]}`;
+                img.src = imgUrl;
                 messageElement.appendChild(img);
             } else {
                 messageElement.textContent = message;
