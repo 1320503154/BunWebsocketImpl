@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Chat</title>
+    <title>Enhanced WebSocket Chat</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -14,7 +14,7 @@
         }
 
         #chatBox {
-            height: 300px;
+            height: 400px;
             border: 1px solid #ccc;
             overflow-y: scroll;
             margin-bottom: 10px;
@@ -22,49 +22,110 @@
         }
 
         #messageInput {
-            width: 70%;
+            width: 60%;
             padding: 5px;
         }
 
-        #sendButton {
+        #receiverInput {
+            width: 20%;
+            padding: 5px;
+        }
+
+        button {
             padding: 5px 10px;
+        }
+
+        #loginForm {
+            margin-bottom: 20px;
+        }
+
+        .private {
+            color: blue;
+        }
+
+        .system {
+            color: gray;
+            font-style: italic;
+        }
+
+        img {
+            max-width: 200px;
+            max-height: 200px;
         }
     </style>
 </head>
 
 <body>
-    <h1>WebSocket Chat</h1>
-    <div id="chatBox"></div>
-    <input type="text" id="messageInput" placeholder="Type a message...">
-    <button id="sendButton">Send</button>
+    <div id="loginForm">
+        <input type="text" id="usernameInput" placeholder="Enter your username">
+        <button id="loginButton">Login</button>
+    </div>
+
+    <div id="chatInterface" style="display: none;">
+        <h1>WebSocket Chat</h1>
+        <div id="chatBox"></div>
+        <input type="text" id="receiverInput" placeholder="Receiver (optional)">
+        <input type="text" id="messageInput" placeholder="Type a message...">
+        <button id="sendButton">Send</button>
+        <input type="file" id="imageInput" accept="image/*">
+        <button id="sendImageButton">Send Image</button>
+    </div>
 
     <script>
+        let socket;
+        let username;
+
+        const IMAGE_URL = 'http://localhost:3000/uploads';
+        const SERVER_URL = '/api';
+        const WS_URL = 'ws://localhost:3000';
+
+        const loginForm = document.getElementById('loginForm');
+        const usernameInput = document.getElementById('usernameInput');
+        const loginButton = document.getElementById('loginButton');
+        const chatInterface = document.getElementById('chatInterface');
         const chatBox = document.getElementById('chatBox');
+        const receiverInput = document.getElementById('receiverInput');
         const messageInput = document.getElementById('messageInput');
         const sendButton = document.getElementById('sendButton');
+        const imageInput = document.getElementById('imageInput');
+        const sendImageButton = document.getElementById('sendImageButton');
 
-        const socket = new WebSocket('ws://localhost:3000');
-
-        socket.onopen = function (event) {
-            appendMessage('Connected to the chat server');
+        loginButton.onclick = function () {
+            username = usernameInput.value.trim();
+            if (username) {
+                loginForm.style.display = 'none';
+                chatInterface.style.display = 'block';
+                connectWebSocket();
+            }
         };
 
-        socket.onmessage = function (event) {
-            appendMessage(event.data);
-        };
+        function connectWebSocket() {
+            socket = new WebSocket(`${WS_URL}/chat?username=${encodeURIComponent(username)}`);
 
-        socket.onclose = function (event) {
-            appendMessage('Disconnected from the chat server');
-        };
+            socket.onopen = function (event) {
+                appendMessage('Connected to the chat server', 'system');
+            };
 
-        socket.onerror = function (error) {
-            appendMessage('Error: ' + error.message);
-        };
+            socket.onmessage = function (event) {
+                const data = JSON.parse(event.data);
+                if (data.type === 'chat') {
+                    appendMessage(data.content, 'public');
+                } else if (data.type === 'private') {
+                    const prefix = data.sender ? `[PM from ${data.sender}]` : `[PM to ${data.receiver}]`;
+                    appendMessage(`${prefix} ${data.content}`, 'private');
+                }
+            };
 
-        sendButton.onclick = function () {
-            sendMessage();
-        };
-        // Send message when Enter key is pressed
+            socket.onclose = function (event) {
+                appendMessage('Disconnected from the chat server', 'system');
+            };
+
+            socket.onerror = function (error) {
+                appendMessage('Error: ' + error.message, 'system');
+            };
+        }
+
+        sendButton.onclick = sendMessage;
         messageInput.onkeypress = function (event) {
             if (event.keyCode === 13) { // Enter key
                 sendMessage();
@@ -72,16 +133,59 @@
         };
 
         function sendMessage() {
-            const message = messageInput.value;//when user press enter key or click on send button
-            if (message) {//if message is not empty
-                socket.send(message);//send message to server
-                messageInput.value = '';//clear the input field
+            const receiver = receiverInput.value.trim();
+            const message = messageInput.value.trim();
+            if (message) {
+                const data = {
+                    type: 'chat',
+                    content: message
+                };
+                if (receiver) {
+                    data.receiver = receiver;
+                }
+                socket.send(JSON.stringify(data));
+                messageInput.value = '';
             }
         }
+        sendImageButton.onclick = async function () {
+            const file = imageInput.files[0]; // 获取用户选择的图片文件
+            if (file) {
+                const formData = new FormData(); // 创建FormData对象用于表单数据序列化
+                formData.append('image', file); // 将图片文件添加到FormData对象中
 
-        function appendMessage(message) {
+                try {
+                    const response = await fetch(`${SERVER_URL}/upload`, {
+                        method: 'POST', // 设置请求方法为POST
+                        body: formData // 将FormData对象作为请求体发送
+                    });
+                    const result = await response.json(); // 将响应体解析为JSON格式
+
+                    const receiver = receiverInput.value.trim(); // 获取接收者信息并去除首尾空白字符
+                    const data = {
+                        type: 'image', // 数据类型为图片
+                        filename: result.filename // 图片文件名
+                    };
+                    if (receiver) {
+                        data.receiver = receiver; // 如果存在接收者信息，将其添加到数据对象中
+                    }
+                    socket.send(JSON.stringify(data)); // 将数据对象序列化为JSON字符串并发送
+                    imageInput.value = ''; // 清空文件输入框
+                } catch (error) {
+                    console.error('Error uploading image:', error); // 捕获并打印上传图片过程中发生的错误
+                }
+            }
+        };
+
+        function appendMessage(message, type) {
             const messageElement = document.createElement('div');
-            messageElement.textContent = message;
+            messageElement.className = type;
+            if (message.startsWith('[Image]')) {
+                const img = document.createElement('img');
+                img.src = `${IMAGE_URL}${message.split(' ')[1]}`;
+                messageElement.appendChild(img);
+            } else {
+                messageElement.textContent = message;
+            }
             chatBox.appendChild(messageElement);
             chatBox.scrollTop = chatBox.scrollHeight;
         }
